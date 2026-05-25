@@ -61,25 +61,51 @@ DEFAULT_OVERLAP  = 40
 DEFAULT_QUALITY  = 0       # quality_score mínimo (0 = todos)
 
 
-# ─── Descarga PDF desde PMC ───────────────────────────────────────────────────
-PMC_URLS = [
-    "https://europepmc.org/backend/ptpmcrender.fcgi?accid={pmcid}&blobtype=pdf",
-    "https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}/pdf/",
-]
+# ─── Descarga PDF via Unpaywall (DOI → PDF URL) ──────────────────────────────
+UNPAYWALL_EMAIL = "fernver62@gmail.com"
 
-def download_pdf(pmcid: str, out_path: Path, timeout: int = 60) -> bool:
+def _get_pdf_url_unpaywall(doi: str, timeout: int = 15) -> str | None:
+    """Consulta Unpaywall para obtener la URL del PDF open access."""
+    doi_clean = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
+    url = f"https://api.unpaywall.org/v2/{doi_clean}?email={UNPAYWALL_EMAIL}"
+    try:
+        r = requests.get(url, timeout=timeout)
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        loc  = data.get("best_oa_location") or {}
+        return loc.get("url_for_pdf") or loc.get("url")
+    except Exception:
+        return None
+
+
+def download_pdf(pmcid: str, doi: str, out_path: Path, timeout: int = 60) -> bool:
     headers = {"User-Agent": "scientific-figure-pipeline/1.0 (research use)"}
-    for url_tmpl in PMC_URLS:
-        url = url_tmpl.format(pmcid=pmcid)
-        try:
-            r = requests.get(url, headers=headers, allow_redirects=True,
-                             timeout=timeout, stream=True)
-            ct = r.headers.get("content-type", "")
-            if r.status_code == 200 and ("pdf" in ct or r.content[:4] == b"%PDF"):
-                out_path.write_bytes(r.content)
-                return True
-        except Exception as e:
-            print(f"    descarga fallida ({url[:60]}...): {e}")
+
+    # 1) Unpaywall via DOI
+    if doi:
+        pdf_url = _get_pdf_url_unpaywall(doi)
+        if pdf_url:
+            try:
+                r = requests.get(pdf_url, headers=headers, allow_redirects=True,
+                                 timeout=timeout)
+                if r.status_code == 200 and r.content[:4] == b"%PDF":
+                    out_path.write_bytes(r.content)
+                    return True
+                print(f"    Unpaywall URL no devolvió PDF ({r.status_code}): {pdf_url[:70]}")
+            except Exception as e:
+                print(f"    Unpaywall descarga fallida: {e}")
+
+    # 2) Fallback: PMC directo via pmcid
+    pmcid_url = f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}/pdf/"
+    try:
+        r = requests.get(pmcid_url, headers=headers, allow_redirects=True, timeout=timeout)
+        if r.status_code == 200 and r.content[:4] == b"%PDF":
+            out_path.write_bytes(r.content)
+            return True
+    except Exception as e:
+        print(f"    PMC fallback fallido: {e}")
+
     return False
 
 
@@ -140,7 +166,7 @@ def process_paper(row, out_dir: Path, server: str,
 
     # 1) Descargar PDF
     print(f"  Descargando {pmcid} ...")
-    ok = download_pdf(pmcid, pdf_path)
+    ok = download_pdf(pmcid, doi, pdf_path)
     if not ok:
         print(f"  ERROR: no se pudo descargar {pmcid}")
         status["status"] = "download_failed"
