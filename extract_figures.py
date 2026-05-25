@@ -63,6 +63,10 @@ def find_captions(doc) -> list[Caption]:
             m = CAPTION_RE.match(first_line)
             if not m:
                 continue
+            # Ignorar bloques rotados: caption real nunca tiene <20pt de ancho
+            bx0, _, bx1, _ = b["bbox"]
+            if (bx1 - bx0) < 20:
+                continue
             raw = m.group(1).strip().lower()
             if "table" in raw:
                 kind, prefix = "table", "Table"
