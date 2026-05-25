@@ -113,12 +113,12 @@ def load_papers(metadata_path: str, texts_path: str,
 def process_paper(row, out_dir: Path, server: str,
                   top_k: int, chunk_words: int, overlap: int,
                   max_tokens: int, temperature: float, timeout: int,
-                  keep_figures: bool) -> dict:
+                  keep_figures: bool, extract_only: bool = False) -> dict:
 
     pmcid     = row.pmcid
     doi       = getattr(row, "doi", "")
     title     = getattr(row, "title", "")
-    text      = row.text_clean
+    text      = getattr(row, "text_clean", "")
     paper_dir = out_dir / pmcid
 
     status = {
@@ -128,8 +128,9 @@ def process_paper(row, out_dir: Path, server: str,
     }
     t0 = time.time()
 
-    # Resume: saltar si ya tiene analysis.json
-    if (paper_dir / "analysis.json").exists():
+    # Resume: saltar si ya completó el paso correspondiente
+    done_marker = paper_dir / ("figures.json" if extract_only else "analysis.json")
+    if done_marker.exists():
         print(f"  SKIP {pmcid} (ya procesado)")
         status["status"] = "skip"
         return status
@@ -167,6 +168,12 @@ def process_paper(row, out_dir: Path, server: str,
     n_figs = len(json.loads(figures_json.read_text())["items"])
     status["figures"] = n_figs
     print(f"  {n_figs} figuras extraídas")
+
+    # Modo solo extracción: terminar aquí
+    if extract_only:
+        pdf_path.unlink(missing_ok=True)
+        status["elapsed_sec"] = round(time.time() - t0, 1)
+        return status
 
     # 3) Escribir texto del DB a archivo temporal
     txt_path = paper_dir / "paper_context.txt"
@@ -247,6 +254,8 @@ def main(argv=None):
     # Descarga
     p.add_argument("--delay", type=float, default=DEFAULT_DELAY,
                    help=f"Segundos entre descargas (def: {DEFAULT_DELAY})")
+    p.add_argument("--extract-only", action="store_true",
+                   help="Solo descarga y extrae figuras, sin correr el análisis LLM")
 
     args = p.parse_args(argv)
 
@@ -267,8 +276,8 @@ def main(argv=None):
     if df.empty:
         sys.exit("No hay papers con los filtros especificados.")
 
-    # Verificar servidor LLM
-    if not rag.server_health(args.server):
+    # Verificar servidor LLM (solo si vamos a analizar)
+    if not args.extract_only and not rag.server_health(args.server):
         sys.exit(f"Servidor LLM no responde: {args.server}")
 
     print(f"\nServidor: {args.server}")
@@ -291,7 +300,8 @@ def main(argv=None):
             max_tokens   = args.max_tokens,
             temperature  = args.temperature,
             timeout      = args.timeout,
-            keep_figures = True,  # siempre conservar (las necesita el analysis.json)
+            keep_figures = True,
+            extract_only = args.extract_only,
         )
 
         # Log incremental
