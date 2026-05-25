@@ -66,18 +66,39 @@ RETRY_BACKOFF             = 3
 
 # ─── Helpers de prompt ────────────────────────────────────────────────────────
 
+def _extract_abstract(text: str, fallback_words: int = 400) -> str:
+    """
+    Extrae la sección Abstract real del paper buscando el encabezado 'Abstract'
+    y cortando en el siguiente encabezado de sección (Introduction, Methods, etc.).
+    Fallback: primeras fallback_words palabras si no se encuentra.
+    """
+    # Encabezados que marcan el fin del abstract
+    END_SECTIONS = re.compile(
+        r'^\s*(introduction|background|methods?|materials?\s+and\s+methods?|'
+        r'results?|discussion|keywords?|1[\.\s]|2[\.\s])',
+        re.IGNORECASE | re.MULTILINE,
+    )
+    # Buscar inicio del abstract
+    start_m = re.search(r'(?:^|\n)\s*abstract\s*\n', text, re.IGNORECASE)
+    if start_m:
+        body = text[start_m.end():]
+        end_m = END_SECTIONS.search(body)
+        snippet = body[:end_m.start()].strip() if end_m else body[:3000].strip()
+        if snippet:
+            return snippet
+    # Fallback: primeras N palabras
+    return " ".join(text.split()[:fallback_words])
+
+
 def _fmt_abstract(text: str, max_words: int = 0) -> str:
     """
-    Formatea el texto del paper para inyectarlo en los prompts de inferencia.
-    max_words=0 → texto completo sin recortar.
+    Formatea el abstract real del paper para inyectarlo en prompts.
+    max_words ignorado — se usa detección de sección.
     """
     if not text or not text.strip():
         return ""
-    words = text.split()
-    if max_words > 0:
-        words = words[:max_words]
-    snippet = " ".join(words)
-    return f"PAPER CONTEXT ({len(words)} words):\n{snippet}\n\n"
+    snippet = _extract_abstract(text)
+    return f"PAPER ABSTRACT:\n{snippet}\n\n"
 
 
 def _fmt_full_context(text: str, max_words: int = 0) -> str:
