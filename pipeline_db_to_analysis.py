@@ -6,6 +6,7 @@ Para cada paper en el parquet:
   1. Lee doi, pmcid y text_clean del DB
   2. Descarga el PDF desde PubMed Central
   3. Extrae figuras con extract_figures.py
+  3b. Extrae tablas con extract_tables.py (find_tables)
   4. Usa text_clean del DB como contexto (sin re-extraer del PDF)
   5. Analiza con analyze_figures_v2_rag.py (inference + anchored RAG)
   6. Elimina el PDF
@@ -15,7 +16,9 @@ Salida por paper:
   out-dir/
   └── {pmcid}/
       ├── p002_Figure_1.png
+      ├── p007_Table_1.png
       ├── figures.json
+      ├── tables.json
       └── analysis.json
 
 Uso:
@@ -48,6 +51,7 @@ SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
 import extract_figures as ef
+import extract_tables as et
 import analyze_figures_v2_rag as rag
 
 
@@ -151,7 +155,7 @@ def process_paper(row, out_dir: Path, server: str,
     status = {
         "pmcid": pmcid, "doi": doi, "title": title,
         "status": "ok", "error": None,
-        "figures": 0, "elapsed_sec": 0,
+        "figures": 0, "tables": 0, "elapsed_sec": 0,
     }
     t0 = time.time()
 
@@ -195,6 +199,15 @@ def process_paper(row, out_dir: Path, server: str,
     n_figs = len(json.loads(figures_json.read_text())["items"])
     status["figures"] = n_figs
     print(f"  {n_figs} figuras extraídas")
+
+    # 2b) Extraer tablas
+    try:
+        tables = et.extract_tables_all(str(pdf_path), out_dir=str(paper_dir), dpi=200, quiet=True)
+        status["tables"] = len(tables)
+        print(f"  {len(tables)} tabla(s) extraída(s)")
+    except Exception as e:
+        print(f"  WARN extracción tablas: {e}")
+        status["tables"] = 0
 
     # Modo solo extracción: terminar aquí
     if extract_only:
