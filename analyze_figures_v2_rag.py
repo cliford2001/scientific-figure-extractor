@@ -56,12 +56,29 @@ DEFAULT_TEMPERATURE       = 0.0        # determinista; evita alucinaciones
 DEFAULT_TIMEOUT           = 300        # segundos por llamada
 DEFAULT_CONTEXT_STRATEGY  = "full"     # "full" | "bm25"
 DEFAULT_MAX_CONTEXT_WORDS = 0          # 0 = sin límite; >0 = truncar texto completo
-DEFAULT_ABSTRACT_WORDS    = 0          # 0 = abstract completo; >0 = primeras N palabras
+DEFAULT_ABSTRACT_WORDS    = 0          # 0 = abstract completo detectado por sección
 DEFAULT_CHUNK_WORDS       = 250        # tamaño de chunk en modo bm25
 DEFAULT_CHUNK_OVERLAP     = 40         # overlap entre chunks en modo bm25
-DEFAULT_TOP_K             = 5          # chunks BM25 recuperados por ítem
+DEFAULT_TOP_K             = 10         # chunks BM25 recuperados por ítem (Lewis et al. 2020 usa 5; subimos a 10 por ventanas mayores)
 MAX_RETRIES               = 5
 RETRY_BACKOFF             = 3
+
+# ─── Configuración recomendada por GPU ────────────────────────────────────────
+#
+#  GTX 1080 Ti  (11 GB, ctx 12 288):
+#    --context-strategy full --max-context-words 3000
+#
+#  RTX 3090 / RTX 4090  (ctx 32 768):
+#    --context-strategy full --max-context-words 0
+#
+#  A100 / H100  (ctx 128 000+):
+#    --context-strategy full --max-context-words 0
+#
+#  Papers muy largos en GPU chica:
+#    --context-strategy bm25 --top-k 10
+#
+# Referencia BM25/RAG: Lewis et al. 2020 (DOI: 10.48550/arXiv.2005.11401)
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 # ─── Helpers de prompt ────────────────────────────────────────────────────────
