@@ -363,14 +363,22 @@ def analyze_all(figures_json, pdf_path=None, context_file=None, server=DEFAULT_S
                 mode_inference=True, mode_anchored=True,
                 chunk_words=DEFAULT_CHUNK_WORDS, overlap=DEFAULT_CHUNK_OVERLAP,
                 top_k=DEFAULT_TOP_K, max_tokens=DEFAULT_MAX_TOKENS,
-                temperature=DEFAULT_TEMPERATURE, timeout=DEFAULT_TIMEOUT, out_path=None):
+                temperature=DEFAULT_TEMPERATURE, timeout=DEFAULT_TIMEOUT, out_path=None,
+                tables_json=None):
 
     fig_json = Path(figures_json)
     if pdf_path:
         pdf_path = Path(pdf_path)
 
     meta  = json.loads(fig_json.read_text(encoding="utf-8"))
-    items = meta["items"]
+    items = list(meta["items"])
+
+    # Merge tables from extract_tables.py if provided
+    if tables_json:
+        tbl_path = Path(tables_json)
+        if tbl_path.exists():
+            tbl_meta = json.loads(tbl_path.read_text(encoding="utf-8"))
+            items.extend(tbl_meta["items"])
 
     if out_path is None:
         out_path = fig_json.parent / "analyses_rag.json"
@@ -393,8 +401,10 @@ def analyze_all(figures_json, pdf_path=None, context_file=None, server=DEFAULT_S
         except Exception:
             pass
 
+    n_figs = sum(1 for it in items if it.get("kind") != "table")
+    n_tbls = sum(1 for it in items if it.get("kind") == "table")
     print(f"\nServer: {server}")
-    print(f"Items: {len(items)} | hechos: {len(done)}")
+    print(f"Items: {len(items)} ({n_figs} figuras + {n_tbls} tablas) | hechos: {len(done)}")
     print(f"Modos: inference={mode_inference} anchored={mode_anchored} | top_k={top_k}\n")
 
     # Construir índice RAG una sola vez
