@@ -297,6 +297,53 @@ Analyze this table using the retrieved paper sections as reference. Respond ONLY
 Never refuse."""
 
 
+# ─── Prompt de síntesis final (texto puro, sin imagen) ───────────────────────
+
+PROMPT_PAPER_SUMMARY_TEMPLATE = """You have analyzed all figures and tables of a scientific paper.
+
+PAPER ABSTRACT:
+{abstract}
+
+INDIVIDUAL ANALYSES ({n_items} items):
+{items_block}
+
+Based on the above analyses, write a paper-level synthesis. Respond ONLY with valid JSON:
+
+{{
+  "main_contribution": "the central claim or finding the paper makes, in 1-2 sentences.",
+  "narrative": "how the figures and tables build the paper's argument step by step. Cite specific items (Fig1, Table2, etc.) and connect their findings.",
+  "key_evidence": ["label of the 3 most critical items that support the main contribution"],
+  "contradictions_or_gaps": "any figures or tables that contradict each other, or gaps in evidence. Write 'None detected' if coherent.",
+  "limitations_noted": "methodological or statistical limitations visible across the analyses.",
+  "overall_confidence": "high | medium | low"
+}}
+
+Never refuse. Base all claims strictly on the individual analyses provided above."""
+
+
+def _build_items_block(results: list) -> str:
+    """Formatea los análisis individuales para el prompt de síntesis."""
+    lines = []
+    for r in results:
+        label    = r.get("label", "?")
+        kind     = "Table" if r.get("kind") == "table" else "Figure"
+        caption  = r.get("caption", "")[:120]
+        # Preferir anchored_parsed, fallback a inference_parsed
+        parsed   = r.get("anchored_parsed") or r.get("inference_parsed") or {}
+        finding  = (parsed.get("key_findings") or parsed.get("key_finding")
+                    or parsed.get("key_entries") or parsed.get("key_pattern") or "")
+        conclusion = (parsed.get("scientific_conclusion") or
+                      parsed.get("scientific_interpretation") or "")
+        conf     = r.get("confidence", "?")
+        lines.append(
+            f"[{label}] ({kind}) caption: {caption}\n"
+            f"  key finding: {finding}\n"
+            f"  conclusion: {conclusion}\n"
+            f"  confidence: {conf}"
+        )
+    return "\n\n".join(lines)
+
+
 # ─── HTTP client ──────────────────────────────────────────────────────────────
 def ask_api(server, prompt, image_bytes=None, max_tokens=DEFAULT_MAX_TOKENS,
             temperature=DEFAULT_TEMPERATURE, timeout=DEFAULT_TIMEOUT):
@@ -637,6 +684,40 @@ def analyze_all(
             }, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+
+    # ── Síntesis final del paper (texto puro, sin imagen) ──────────────────
+    paper_summary = None
+    if results:
+        print("\nGenerando síntesis final del paper...")
+        try:
+            abstract_text = _extract_abstract(raw_text) if raw_text else ""
+            items_block   = _build_items_block(results)
+            prompt_sum    = PROMPT_PAPER_SUMMARY_TEMPLATE.format(
+                abstract=abstract_text or "Not available.",
+                n_items=len(results),
+                items_block=items_block,
+            )
+            ans_sum      = ask_api(server, prompt_sum, image_bytes=None,
+                                   max_tokens=max_tokens, temperature=temperature,
+                                   timeout=timeout)
+            paper_summary = _parse_json(ans_sum) or {"raw": ans_sum}
+            print(f"  Síntesis: {str(paper_summary)[:100]}...")
+        except Exception as e:
+            print(f"  WARN síntesis: {e}")
+
+    out_path.write_text(
+        json.dumps({
+            "total":             len(results),
+            "context_strategy":  context_strategy,
+            "abstract_words":    abstract_words or "full",
+            "max_context_words": max_context_words or "unlimited",
+            "top_k":             top_k if context_strategy == "bm25" else None,
+            "chunk_words":       chunk_words if context_strategy == "bm25" else None,
+            "paper_summary":     paper_summary,
+            "items":             results,
+        }, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
     print(f"\nResultados guardados: {out_path}")
     return results
