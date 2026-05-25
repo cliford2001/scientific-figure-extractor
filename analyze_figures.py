@@ -37,7 +37,7 @@ import requests
 
 # ─── Defaults ────────────────────────────────────────────────────────────────
 DEFAULT_SERVER         = "http://127.0.0.1:8080/v1/chat/completions"
-DEFAULT_MAX_TOKENS     = 800
+DEFAULT_MAX_TOKENS     = 1200
 DEFAULT_TEMPERATURE    = 0.2
 DEFAULT_TIMEOUT        = 300
 DEFAULT_CONTEXT_BUDGET = 6000   # tokens reservados para texto del paper
@@ -112,7 +112,10 @@ What the data reveals about the biology, pathway, or system being studied. Refer
 How this figure advances the paper's overall argument (establishes baseline, demonstrates causation, validates model, etc.).
 
 ## Limitations / Caveats
-Any limitations or alternative interpretations visible in the data or noted in the paper."""
+Any limitations or alternative interpretations visible in the data or noted in the paper.
+
+## Scientific Conclusion
+Synthesize the visual evidence with the paper's framework into a precise, self-contained scientific conclusion. State what this figure definitively demonstrates, what alternative explanations it rules out, and its conceptual significance in the paper's broader argument. Write as a scientist who has fully internalized both the data and the theory — be rigorous, specific, and let the conclusion feel earned by the evidence."""
 
 PROMPT_ANCHORED_TBL_TEMPLATE = """You are creating training labels using a scientific table and its paper. Be precise, never refuse.
 
@@ -133,7 +136,10 @@ Most relevant rows/columns given the paper's claims. Cite specific values.
 What conclusion from the paper this table substantiates. Quote relevant text.
 
 ## Significance
-Why this comparison matters in the paper's narrative."""
+Why this comparison matters in the paper's narrative.
+
+## Scientific Conclusion
+Synthesize the table's data with the paper's framework into a precise scientific conclusion. State what this table definitively demonstrates, what it rules out, and its role in the paper's argument. Be rigorous and specific — let the conclusion be earned by the numbers."""
 
 
 # Para resumir paper largo (solo texto, sin imagen)
