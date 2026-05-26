@@ -402,13 +402,38 @@ sample15_output/
 
 ---
 
+## Model and API compatibility
+
+The pipeline is **model-agnostic**. It communicates exclusively via the OpenAI-compatible chat completions API — any server that implements this interface works without code changes.
+
+```bash
+# Change only the --server flag to switch providers
+python run_analysis_batch.py --input-dir sample15_output \
+    --server http://127.0.0.1:8080/v1/chat/completions   # llama.cpp (local GPU)
+
+python run_analysis_batch.py --input-dir sample15_output \
+    --server http://127.0.0.1:11434/v1/chat/completions  # Ollama (local)
+
+python run_analysis_batch.py --input-dir sample15_output \
+    --server https://api.openai.com/v1/chat/completions  # GPT-4o (cloud)
+```
+
+**Requirements for any model used:**
+- Multimodal support (image + text input)
+- Instruction following (produces structured JSON on request)
+- OpenAI-compatible `/v1/chat/completions` endpoint
+
+**Compatible servers:** llama.cpp · Ollama · LM Studio · Jan · vLLM · OpenAI API · any OpenAI-compatible wrapper
+
+---
+
 ## LLM server setup (llama.cpp)
 
 ```bash
-# GTX 1080 Ti — 8B quantized model, context 12 288
+# GTX 1080 Ti — 8B model, context 12 288
 llama-server \
-    -m InternVL3-8B-Q8_0.gguf \
-    --mmproj mmproj-InternVL3-8B-Q8_0.gguf \
+    -m Qwen2.5-VL-7B-Q8.gguf \
+    --mmproj qwen25vl-mmproj-F16.gguf \
     --host 0.0.0.0 --port 8080 \
     -ngl 99 -np 1 \
     -c 12288 \
@@ -422,9 +447,21 @@ llama-server \
     -ngl 99 \
     -c 32768 \
     --jinja
+
+# CPU only (any RAM, no GPU required — slower)
+llama-server \
+    -m Qwen2.5-VL-7B-Q8.gguf \
+    --mmproj qwen25vl-mmproj-F16.gguf \
+    --host 0.0.0.0 --port 8080 \
+    -ngl 0 -np 1 \
+    -c 12288 \
+    --jinja
 ```
 
+> **Note on GPU backends:** If your llama.cpp build uses Vulkan (instead of CUDA), multimodal projection may produce incoherent outputs on some models. If vision responses are garbage, switch to CPU (`-ngl 0`) or a CUDA build.
+
 **Tested models (GGUF):**
+- [Qwen/Qwen2.5-VL-7B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct-GGUF) — recommended
 - [ggml-org/InternVL3-8B-Instruct-GGUF](https://huggingface.co/ggml-org/InternVL3-8B-Instruct-GGUF)
 - [ggml-org/InternVL3-14B-Instruct-GGUF](https://huggingface.co/ggml-org/InternVL3-14B-Instruct-GGUF)
 
